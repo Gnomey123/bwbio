@@ -8,3 +8,4 @@ pub mod proto;
 pub mod crypto;
 pub mod browser;
 pub mod cli;
+pub mod tui;

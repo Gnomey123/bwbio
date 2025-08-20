@@ -14,6 +14,7 @@ anyhow = "1"
 argh = "0.1"
 base64 = "0.22"
 cbc = { version = "0.1", features = ["std"] }
+dialoguer = "0.11"
 hmac = "0.12"
 rand = "0.9"
 rsa = "0.10.0-rc.4"
@@ -32,6 +33,7 @@ windows = { version = "0.61", features = [
 ] }
 windows-future = "0.2"
 windows-strings = "0.4"
+windows-registry = "0.5"
 
 [profile.release]
 strip = true

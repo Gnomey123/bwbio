@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2025 Aalivexy
 
-use std::ffi::OsStr;
-use std::os::windows::ffi::OsStrExt;
-use std::path::PathBuf;
-use std::{env, iter};
-
-use crate::cng::{CngProvider, DEFAULT_KEY_NAME};
+use crate::cng::CngProvider;
+use crate::cng::default_key_name;
 use crate::kmgr::KeyManager;
 use argh::FromArgs;
-use windows::core::PCWSTR;
+use std::env;
+use std::path::PathBuf;
+use windows_strings::HSTRING;
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Key management command line tool
@@ -26,7 +24,7 @@ enum Command {
     Export(ExportCmd),
     Delete(DeleteCmd),
     Check(CheckCmd),
-    Cng(CngCmd), // 新增Cng子命令
+    Cng(CngCmd),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -112,16 +110,11 @@ struct CngDeleteCmd {
     key_name: String,
 }
 
-fn osstr_to_pcwstr(s: &str) -> PCWSTR {
-    let wide: Vec<u16> = OsStr::new(s).encode_wide().chain(iter::once(0)).collect();
-    PCWSTR::from_raw(wide.as_ptr())
-}
-
 pub fn kmgr_cli() {
     let cmd: KmgrCmd = argh::from_env();
     let key_name = match env::var("CNG_KEY_NAME") {
-        Ok(s) => osstr_to_pcwstr(&s),
-        Err(_) => DEFAULT_KEY_NAME,
+        Ok(s) => HSTRING::from(s),
+        Err(_) => default_key_name(),
     };
     let key_dir = env::var("BW_KEY_DIR")
         .map(PathBuf::from)
@@ -190,18 +183,26 @@ pub fn kmgr_cli() {
                     Err(e) => eprintln!("Failed to list CNG keys: {e}"),
                 },
                 CngSubCommand::Create(CngCreateCmd { key_name }) => {
-                    match provider.create_key(osstr_to_pcwstr(&key_name)) {
-                        Ok(_) => println!("CNG key '{key_name}' created successfully."),
-                        Err(e) => eprintln!("Failed to create CNG key '{key_name}': {e}"),
+                    match provider.create_key(HSTRING::from(key_name.as_str())) {
+                        Ok(_) => {
+                            println!("CNG key '{key_name}' created successfully.")
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to create CNG key '{key_name}': {e}")
+                        }
                     }
                 }
                 CngSubCommand::Delete(CngDeleteCmd { key_name }) => {
-                    match provider.open_key(osstr_to_pcwstr(&key_name)) {
+                    match provider.open_key(HSTRING::from(key_name.as_str())) {
                         Ok(key) => match key.delete() {
-                            Ok(_) => println!("CNG key '{key_name}' deleted successfully."),
+                            Ok(_) => {
+                                println!("CNG key '{key_name}' deleted successfully.")
+                            }
                             Err(e) => eprintln!("Failed to delete CNG key '{key_name}': {e}"),
                         },
-                        Err(e) => eprintln!("Failed to open CNG key '{key_name}': {e}"),
+                        Err(e) => {
+                            eprintln!("Failed to open CNG key '{key_name}': {e}")
+                        }
                     }
                 }
             }

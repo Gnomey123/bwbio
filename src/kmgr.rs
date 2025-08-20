@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2025 Aalivexy
 
-use crate::cng::{CngKey, CngProvider, DEFAULT_KEY_NAME};
+use crate::cng::default_key_name;
+use crate::cng::{CngKey, CngProvider};
 use anyhow::Result;
 use std::{
     env::current_exe,
     fs::{create_dir_all, read, read_dir, remove_file, write},
     path::PathBuf,
 };
-use windows::core::PCWSTR;
+use windows_strings::HSTRING;
 
 pub struct KeyManager {
     cng_provider: CngProvider,
@@ -19,7 +20,7 @@ pub struct KeyManager {
 impl Default for KeyManager {
     fn default() -> Self {
         Self::new(
-            DEFAULT_KEY_NAME,
+            default_key_name(),
             current_exe()
                 .expect("Failed to get current executable path")
                 .parent()
@@ -31,7 +32,7 @@ impl Default for KeyManager {
 }
 
 impl KeyManager {
-    pub fn new(cng_key_name: PCWSTR, bw_key_directory: PathBuf) -> Self {
+    pub fn new(cng_key_name: HSTRING, bw_key_directory: PathBuf) -> Self {
         let cng_provider = CngProvider::new().expect("Failed to create CNG provider");
         let cng_key = cng_provider
             .open_key(cng_key_name)

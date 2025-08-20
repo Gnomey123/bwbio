@@ -31,6 +31,7 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 windows-future = "0.2"
+windows-strings = "0.4"
 
 [profile.release]
 strip = true

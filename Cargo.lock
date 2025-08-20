@@ -127,6 +127,7 @@ dependencies = [
  "subtle",
  "windows",
  "windows-future",
+ "windows-strings",
 ]
 
 [[package]]

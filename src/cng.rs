@@ -4,22 +4,23 @@
 use crate::bio::{authenticate_with_biometrics, get_biometrics_status};
 use anyhow::{Result, bail};
 use std::{ffi::c_void, ptr::null_mut};
-use windows::{
-    Win32::{
-        Foundation::{NTE_BAD_KEYSET, NTE_NO_MORE_ITEMS},
-        Security::Cryptography::{
-            BCRYPT_RSA_ALGORITHM, CERT_KEY_SPEC, MS_PLATFORM_KEY_STORAGE_PROVIDER,
-            NCRYPT_EXPORT_POLICY_PROPERTY, NCRYPT_FLAGS, NCRYPT_KEY_HANDLE, NCRYPT_LENGTH_PROPERTY,
-            NCRYPT_OVERWRITE_KEY_FLAG, NCRYPT_PAD_PKCS1_FLAG, NCRYPT_PROV_HANDLE,
-            NCRYPT_SILENT_FLAG, NCryptCreatePersistedKey, NCryptDecrypt, NCryptDeleteKey,
-            NCryptEncrypt, NCryptEnumKeys, NCryptFinalizeKey, NCryptFreeBuffer, NCryptKeyName,
-            NCryptOpenKey, NCryptOpenStorageProvider, NCryptSetProperty,
-        },
+use windows::Win32::{
+    Foundation::{NTE_BAD_KEYSET, NTE_NO_MORE_ITEMS},
+    Security::Cryptography::{
+        BCRYPT_RSA_ALGORITHM, CERT_KEY_SPEC, MS_PLATFORM_KEY_STORAGE_PROVIDER,
+        NCRYPT_EXPORT_POLICY_PROPERTY, NCRYPT_FLAGS, NCRYPT_KEY_HANDLE, NCRYPT_LENGTH_PROPERTY,
+        NCRYPT_OVERWRITE_KEY_FLAG, NCRYPT_PAD_PKCS1_FLAG, NCRYPT_PROV_HANDLE, NCRYPT_SILENT_FLAG,
+        NCryptCreatePersistedKey, NCryptDecrypt, NCryptDeleteKey, NCryptEncrypt, NCryptEnumKeys,
+        NCryptFinalizeKey, NCryptFreeBuffer, NCryptKeyName, NCryptOpenKey,
+        NCryptOpenStorageProvider, NCryptSetProperty,
     },
-    core::{PCWSTR, w},
 };
+use windows::core::PCWSTR;
+use windows_strings::HSTRING;
 
-pub const DEFAULT_KEY_NAME: PCWSTR = w!("bw-bio");
+pub fn default_key_name() -> HSTRING {
+    HSTRING::from("bw-bio")
+}
 
 pub struct CngProvider {
     provider: NCRYPT_PROV_HANDLE,
@@ -64,14 +65,14 @@ impl CngProvider {
         }
     }
 
-    pub fn create_key(&self, key_name: PCWSTR) -> Result<CngKey> {
+    pub fn create_key(&self, key_name: HSTRING) -> Result<CngKey> {
         unsafe {
             let mut key_handle = NCRYPT_KEY_HANDLE::default();
             NCryptCreatePersistedKey(
                 self.provider,
                 &mut key_handle,
                 BCRYPT_RSA_ALGORITHM,
-                key_name,
+                PCWSTR::from_raw(key_name.as_ptr()),
                 CERT_KEY_SPEC(0),
                 NCRYPT_OVERWRITE_KEY_FLAG,
             )?;
@@ -94,13 +95,13 @@ impl CngProvider {
         }
     }
 
-    pub fn open_key(&self, key_name: PCWSTR) -> Result<CngKey> {
+    pub fn open_key(&self, key_name: HSTRING) -> Result<CngKey> {
         unsafe {
             let mut key_handle = NCRYPT_KEY_HANDLE::default();
             match NCryptOpenKey(
                 self.provider,
                 &mut key_handle,
-                key_name,
+                PCWSTR::from_raw(key_name.as_ptr()),
                 CERT_KEY_SPEC(0),
                 NCRYPT_FLAGS(0),
             ) {

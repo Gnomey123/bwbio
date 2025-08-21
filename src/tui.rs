@@ -83,11 +83,16 @@ fn perform_install(install_dir: &Path) -> Result<(), String> {
     if let Err(e) = std::fs::copy(&current_exe, &target_exe) {
         return Err(format!("Failed to copy exe to target location: {e}"));
     }
+    let target_exe = std::fs::canonicalize(&target_exe)
+        .unwrap_or(target_exe)
+        .to_string_lossy()
+        .to_string();
+    let target_exe = target_exe.strip_prefix(r"\\?\").unwrap_or(&target_exe);
 
     let manifest = serde_json::json!({
         "name": "com.8bit.bitwarden",
         "description": "Bitwarden desktop <-> browser bridge",
-        "path": std::fs::canonicalize(&target_exe).unwrap_or(target_exe),
+        "path": target_exe,
         "type": "stdio",
         "allowed_origins": [
             "chrome-extension://nngceckbapebfimnlniiiahkandclblb/",

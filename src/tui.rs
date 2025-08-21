@@ -30,13 +30,16 @@ fn spawn_and_exit(path: &Path) -> Result<(), String> {
     }
 }
 
-fn register_native_messaging_manifest(manifest_abs: &Path) -> Result<(), String> {
+fn register_native_messaging_manifest(manifest_path: &Path) -> Result<(), String> {
+    let manifest_abs = std::fs::canonicalize(manifest_path)
+        .map_err(|e| format!("Failed to canonicalize manifest path: {e}"))?;
     let manifest_str = manifest_abs.to_string_lossy().to_string();
+    let manifest_str = manifest_str.strip_prefix(r"\\?\").unwrap_or(&manifest_str);
     let mut success_count = 0;
 
     for key_path in REG_KEYS {
         match CURRENT_USER.create(key_path) {
-            Ok(key) => match key.set_string("", &manifest_str) {
+            Ok(key) => match key.set_string("", manifest_str) {
                 Ok(_) => success_count += 1,
                 Err(e) => eprintln!("Warning: failed to set default value for {key_path}: {e}"),
             },
@@ -99,10 +102,7 @@ fn perform_install(install_dir: &Path) -> Result<(), String> {
         return Err(format!("Failed to write manifest: {e}"));
     }
 
-    let manifest_abs = std::fs::canonicalize(&manifest_path)
-        .map_err(|e| format!("Failed to canonicalize manifest path: {e}"))?;
-
-    if let Err(e) = register_native_messaging_manifest(manifest_abs.as_path()) {
+    if let Err(e) = register_native_messaging_manifest(manifest_path.as_path()) {
         return Err(format!("Failed to write registry entries: {e}"));
     }
 
@@ -271,12 +271,11 @@ fn management_menu(kmgr: &KeyManager, install_dir: &Path, key_dir: &Path) -> Res
             }
             Ok(2) => {
                 let manifest_path = install_dir.join(MANIFEST_NAME);
-                match std::fs::canonicalize(&manifest_path) {
-                    Ok(man) => match register_native_messaging_manifest(man.as_path()) {
-                        Ok(_) => println!("Browser integration installed/updated."),
-                        Err(e) => eprintln!("Failed to write registry manifest: {e}"),
-                    },
-                    Err(e) => eprintln!("Manifest not found, cannot install integration: {e}"),
+                // register_native_messaging_manifest will canonicalize the path and return a
+                // useful error if the file does not exist.
+                match register_native_messaging_manifest(manifest_path.as_path()) {
+                    Ok(_) => println!("Browser integration installed/updated."),
+                    Err(e) => eprintln!("Failed to write registry manifest: {e}"),
                 }
             }
             Ok(3) => {

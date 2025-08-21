@@ -2,7 +2,10 @@
 
 A lightweight, native handler for the Bitwarden browser extension's biometric authentication.
 
-Status: WIP/experimental. It works for me on Windows, but initial setup is still manual and there is no independent security audit. Use at your own risk.
+TL;DR
+bwbio is a tiny native helper that lets the Bitwarden browser extension trigger biometric unlocks via Windows Hello without requiring the Electron desktop app. Use on Windows 10/11; verify you understand the security notes before importing secrets.
+
+Status: Ready for use. It works on Windows 10/11; there are still a few small rough edges and manual steps. No independent security audit has been performed — use at your own risk.
 
 ## Why
 
@@ -32,56 +35,46 @@ Security note: I am not a security professional. There has been no formal audit.
 
 - Windows 10/11. Linux/macOS are not supported.
 
-## Build
+## IMPORTANT: permissions
 
-Prerequisites:
-- Rust toolchain (latest stable)
+Do NOT run bwbio as Administrator. Run bwbio as the same user that runs your browser. The program writes registry entries under HKCU (Current User) and must be run without elevated privileges; running under an Administrator account or elevated context can prevent correct CNG/TPM unlocking and will not register the host for other users.
 
-Build release binary:
+## Quickstart — Interactive setup (recommended)
 
-```cmd
-cargo build --release
+Download the latest release, double-click the included `bwbio.exe`, and choose Install. Then it will run the installed `bwbio.exe` and prompt you to import the key.
+
+What the installer does: copies the exe to `%LOCALAPPDATA%\\bwbio`, writes `chrome.json`, and registers HKCU native messaging hosts.
+
+## Importing keys
+
+After installing the host, obtain two values from a logged-in Bitwarden web vault: the `userId` and the `userKey` (base64).
+
+Open the Web Vault, open Developer Tools → Console (F12), paste the snippet below and run it; the console will print two lines: first `userId`, then `userKey` (base64). Copy them separately and paste into the interactive installer's Import prompts (first -> User ID, second -> User Key). Do NOT paste both values together.
+
+```javascript
+let userId = await this.bitwardenContainerService.keyService.stateService.getActiveUserIdFromStorage();
+let masterKey = await new Promise(async r => (await this.bitwardenContainerService.keyService.masterPasswordService.masterKey$(userId)).subscribe(v => r(v)));
+let userKey = await this.bitwardenContainerService.keyService.masterPasswordService.decryptUserKeyWithMasterKey(masterKey, userId);
+console.log(userId);
+console.log(userKey.keyB64);
 ```
 
-The executable will be at `target\release\bwbio.exe`.
+### Clipboard & security
 
-## Install and integrate with the browser extension (manual, WIP)
+These values are sensitive secrets. Only run the console snippet on a trusted machine and browser. After copying, clear or manage your clipboard (Win+V) and avoid leaving these values in shared logs or screenshots.
 
-The following is a manual setup that works today. Automation is intentionally deferred while the project is WIP.
+## Manual install & registry
 
-1) Create or ensure the TPM key exists (optional)
-- By default, bwbio uses a CNG key named `bw-bio` in the Platform Crypto Provider.
-- You can pre-create it using the CLI:
+If you prefer a manual installation or need to place the manifest yourself, follow these fallback steps.
 
-```cmd
-# List existing CNG keys
-bwbio.exe cng list
-
-# Create the default key
-bwbio.exe cng create bw-bio
-```
-
-2) Prepare the key storage directory
-- By default, bwbio stores per-user encrypted keys next to the executable in a `keys` folder. You can override via env var `BW_KEY_DIR`.
-
-3) Import your Bitwarden user key
-- From the web vault or extension console, obtain your `userKeyB64` (base64). See `getkey.js` in this repo for hints on how to locate it programmatically; do this at your own risk.
-- Import it for your Bitwarden userId:
+1) Copy the executable to your chosen install directory, for example:
 
 ```cmd
-bwbio.exe import <userId> <userKeyB64>
+mkdir "%LOCALAPPDATA%\\bwbio"
+copy bwbio.exe "%LOCALAPPDATA%\\bwbio\\bwbio.exe"
 ```
 
-- You can verify and test export (will trigger Windows Hello):
-
-```cmd
-bwbio.exe list
-bwbio.exe check <userId>
-bwbio.exe export <userId>
-```
-
-4) Register the Native Messaging host
-- Copy `chrome.json` from the repo and update the `path` to the absolute path of your `bwbio.exe`:
+2) Create a `chrome.json` manifest in the install directory and update the `path` to the absolute path of your `bwbio.exe`:
 
 ```json
 {
@@ -98,12 +91,51 @@ bwbio.exe export <userId>
 }
 ```
 
-- Place this manifest file in the location expected by your Chromium-based browser. For Chrome on Windows:
-  - HKCU\Software\Google\Chrome\NativeMessagingHosts\com.8bit.bitwarden (Default) = REG_SZ with the full path to the JSON file.
-  - Similarly for Edge: HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.8bit.bitwarden.
+3) Register the manifest by creating the following registry value(s) under HKCU for each browser you want to support:
 
-5) Launch path
-- The program detects Native Messaging when argv[1] starts with `chrome-extension://` and switches to host mode automatically. Otherwise it runs the key manager CLI.
+- `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.8bit.bitwarden = <full path to chrome.json>`
+- `HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.8bit.bitwarden = <full path to chrome.json>`
+
+Note: registry writes should be under HKCU (Current User). Do NOT attempt to write under HKLM or run registry tools elevated for the purpose of installing this host.
+
+## Build
+
+Prerequisites:
+- Rust toolchain (latest stable)
+
+Build release binary:
+
+```cmd
+cargo build --release
+```
+
+The executable will be at `target\\release\\bwbio.exe`.
+
+## Uninstall
+
+Recommended: run the interactive setup wizard and choose Uninstall. The wizard will attempt to:
+
+- Remove the HKCU registry entries it created.
+- Remove the `keys` directory under the install location.
+- Remove the manifest file from the install directory.
+- Attempt to delete the CNG key used by bwbio.
+
+Manual uninstall (fallback):
+
+- Delete `%LOCALAPPDATA%\\bwbio` (or your chosen install dir).
+- Remove the manifest file and delete the registry values under HKCU described in Manual install.
+- Optionally delete the CNG key via the CLI if needed.
+
+## Troubleshooting
+
+- If the console snippet fails or `this.bitwardenContainerService` is undefined, ensure you are on the Web Vault page. The snippet is a best-effort hint and may vary between versions.
+- If import fails during export/check operations, verify that you ran bwbio without elevation and that the CNG key exists and is accessible under your user.
+
+## Caveats and security notes
+
+- Windows Hello provides authentication only, not encryption; TPM/CNG keys may be accessed without an additional per-operation confirmation, so once a process can access the TPM-resident key it can attempt decryption after user presence.
+- No code audit; cryptography may be flawed. Treat as experimental.
+- Native Messaging manifest and registry registration are per-user (HKCU). This program cannot register the host for all users.
 
 ## Usage (CLI)
 
@@ -121,12 +153,6 @@ bwbio.exe cng delete <name>       # delete a CNG key
 Environment variables:
 - CNG_KEY_NAME: override the CNG key name (default: bw-bio)
 - BW_KEY_DIR: override where encrypted user keys are stored
-
-## Caveats and security notes
-
-- Windows Hello provides authentication only, not encryption; any local process with access to the TPM key can attempt decryption after user presence.
-- No code audit; cryptography may be flawed. Treat as experimental.
-- Native Messaging manifest and registry registration are manual at this stage.
 
 ## Credits
 

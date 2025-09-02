@@ -55,7 +55,9 @@ fn send_encrypted(app_id: &str, message: ResponseMessage) -> Result<()> {
     send(json!({
         "appId": app_id,
         "messageId": message.message_id(),
-        "message": enc_str
+        "message": {
+            "encryptedString": enc_str.to_string()
+        }
     }))
 }
 

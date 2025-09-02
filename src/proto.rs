@@ -38,6 +38,12 @@ impl EncString {
     }
 }
 
+impl ToString for EncString {
+    fn to_string(&self) -> String {
+        format!("{}.{}|{}|{}", self.enc_type, self.iv, self.data, self.mac)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct EncryptedMessage {
     command: String,

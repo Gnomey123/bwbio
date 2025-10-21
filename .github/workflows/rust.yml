@@ -11,11 +11,17 @@ env:
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-    - run: rustup update
-    - run: cargo build --release
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable-x86_64-pc-windows-msvc
+          override: true
+          profile: minimal
+
+      - name: Build (release)
+        run: cargo build --release

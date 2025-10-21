@@ -1,4 +1,4 @@
-name: Rust
+name: Rust (Windows build + release)
 
 on:
   push:
@@ -6,13 +6,15 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -23,5 +25,51 @@ jobs:
           override: true
           profile: minimal
 
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Build (release)
         run: cargo build --release
+
+      - name: Find generated .exe
+        id: find_exe
+        shell: bash
+        run: |
+          exe=$(ls target/release/*.exe 2>/dev/null | head -n1 || true)
+          if [ -z "$exe" ]; then
+            echo "No .exe found in target/release" >&2
+            exit 1
+          fi
+          echo "exe=$exe" >> $GITHUB_OUTPUT
+
+      - name: Create draft Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: release-${{ github.run_id }}-${{ github.sha }}
+          release_name: "Automated build ${{ github.sha }}"
+          body: |
+            Automated Windows build created by CI.
+            Binary is attached as a release asset.
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .exe to Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_exe.outputs.exe }}
+          asset_name: ${{ github.repository }}-${{ github.sha }}.exe
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
